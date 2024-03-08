@@ -15,7 +15,7 @@ WORKDIR /app
 COPY --from=builder /app/main .
 COPY --from=builder /app/healthcheck.sh .
 COPY --from=builder /app/schema.sql .
-COPY --from=builder /app/nginx.conf
+COPY --from=builder /app/nginx.conf .
 
 EXPOSE 3000
 
