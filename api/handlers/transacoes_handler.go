@@ -16,45 +16,59 @@ func HandleTransacoes(c *gin.Context) {
     }
 
     if err := c.ShouldBindJSON(&requestBody); err != nil {
-        c.JSON(400, gin.H{"error": "Invalid data"})
+        c.JSON(400, gin.H{"error": "Dados inválidos"})
         return
     }
 
-    _, err := db.DB.Exec("INSERT INTO transacoes (id_cliente, valor, tipo, descricao, realizada_em) VALUES (?, ?, ?, ?, NOW())", clienteID, requestBody.Valor, requestBody.Tipo, requestBody.Descricao)
+    var limiteCliente int
+    err := db.DB.QueryRow("SELECT limite FROM clientes WHERE id = ?", clienteID).Scan(&limiteCliente)
     if err != nil {
-        c.JSON(500, gin.H{"error": "Error inserting transaction into database"})
-		fmt.Println(err)
+        c.JSON(500, gin.H{"error": "Erro ao obter o limite do cliente"})
+        fmt.Println(err)
         return
     }
+
+    var query string
+    var args []interface{}
 
     if requestBody.Tipo == "c" {
-        _, err := db.DB.Exec("UPDATE clientes SET saldo = saldo + ? WHERE id = ?", requestBody.Valor, clienteID)
-        if err != nil {
-            c.JSON(500, gin.H{"error": "Error updating customer balance"})
-            return
-        }
+        query = "INSERT INTO transacoes (id_cliente, valor, tipo, descricao, realizada_em) VALUES (?, ?, ?, ?, NOW())"
+        args = []interface{}{clienteID, requestBody.Valor, requestBody.Tipo, requestBody.Descricao}
     } else if requestBody.Tipo == "d" {
-        var saldoAtual int
-        err := db.DB.QueryRow("SELECT saldo FROM clientes WHERE id = ?", clienteID).Scan(&saldoAtual)
-        if err != nil {
-            c.JSON(500, gin.H{"error": "Error getting customer balance"})
-            return
-        }
+        query = "INSERT INTO transacoes (id_cliente, valor, tipo, descricao, realizada_em) VALUES (?, ?, ?, ?, NOW())"
+        args = []interface{}{clienteID, -requestBody.Valor, requestBody.Tipo, requestBody.Descricao}
+    }
 
-        if requestBody.Tipo == "d" && saldoAtual-requestBody.Valor < -limiteDoCliente {
-            c.JSON(422, gin.H{"error": "Debit transaction not permitted. Insufficient funds."})
-            return
-        }
+    _, err = db.DB.Exec(query, args...)
+    if err != nil {
+        c.JSON(500, gin.H{"error": "Erro ao inserir transação no banco de dados"})
+        fmt.Println(err)
+        return
+    }
 
-        _, err = db.DB.Exec("UPDATE clientes SET saldo = saldo - ? WHERE id = ?", requestBody.Valor, clienteID)
-        if err != nil {
-            c.JSON(500, gin.H{"error": "Error updating customer balance"})
-            return
-        }
+    var saldoAtual int
+    err = db.DB.QueryRow("SELECT saldo FROM clientes WHERE id = ?", clienteID).Scan(&saldoAtual)
+    if err != nil {
+        c.JSON(500, gin.H{"error": "Erro ao consultar saldo do cliente"})
+        fmt.Println(err)
+        return
+    }
+
+    var saldoNovo int
+    if requestBody.Tipo == "c" {
+        saldoNovo = saldoAtual + requestBody.Valor
+    } else if requestBody.Tipo == "d" {
+        saldoNovo = saldoAtual - requestBody.Valor
+    }
+
+    _, err = db.DB.Exec("UPDATE clientes SET saldo = ? WHERE id = ?", saldoNovo, clienteID)
+    if err != nil {
+        c.JSON(500, gin.H{"error": "Erro ao atualizar saldo do cliente"})
+        fmt.Println(err)
+        return
     }
 
     c.JSON(200, gin.H{
-        "limite": 100000,
-        "saldo":  -9098,
+        "saldo": saldoNovo,
     })
 }
