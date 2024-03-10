@@ -15,7 +15,7 @@ docker compose -f docker-compose-local.yml up
 ### Linguagem
 - Golang
 ### Frameworks
-- shinsei
+- nginx
 - gin-gonic
 - mariadb
 --------
